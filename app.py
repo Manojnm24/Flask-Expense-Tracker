@@ -1,6 +1,8 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, send_file
 import sqlite3
 from datetime import datetime
+import csv
+import os
 
 app = Flask(__name__)
 
@@ -49,9 +51,39 @@ def index():
         if row[1] == 'expense':
             category_data[row[2]] += row[3]
 
+    # Data for line chart (expenses over time)
+    line_labels = [row[4] for row in transactions if row[1] == 'expense']
+    line_values = [row[3] for row in transactions if row[1] == 'expense']
+
     conn.close()
     return render_template('index.html', transactions=transactions, income=income, expense=expense,
-                           balance=balance, category_data=category_data)
+                           balance=balance, category_data=category_data,
+                           line_labels=line_labels[::-1], line_values=line_values[::-1])
+
+@app.route('/delete/<int:id>')
+def delete_transaction(id):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM transactions WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect('/')
+
+@app.route('/export_csv')
+def export_csv():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM transactions")
+    transactions = c.fetchall()
+    conn.close()
+
+    filename = 'transactions.csv'
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['ID', 'Type', 'Category', 'Amount', 'Date'])
+        writer.writerows(transactions)
+
+    return send_file(filename, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
